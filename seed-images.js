@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import pg from 'pg';
 import dotenv from 'dotenv';
 
@@ -8,13 +6,10 @@ dotenv.config();
 // ==========================================
 // CONFIGURATION
 // ==========================================
-// Set this to true to use Supabase Storage. Set to false to commit images to Git/Render.
-const USE_SUPABASE_STORAGE = true; 
-
-// Your Supabase Project Reference (extracted from your DATABASE_URL)
+// Your Supabase Project Reference
 const SUPABASE_PROJECT_REF = 'kcvgzzpdhfwadsxxdbjn';
 
-// The name of the public bucket you created in Supabase Storage (e.g. 'product-images')
+// The name of the public bucket you created in Supabase Storage
 const SUPABASE_BUCKET_NAME = 'product-images'; 
 // ==========================================
 
@@ -25,39 +20,95 @@ const pool = new Pool({
 });
 
 async function runSeeder() {
-  const uploadDir = './public/uploads';
-  if (!fs.existsSync(uploadDir)) {
-    console.log(`📁 Creating missing folder: ${uploadDir}`);
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log(`💡 Put your 100+ product images inside ${uploadDir} and run this script again!`);
+  const supabaseKey = process.env.SUPABASE_KEY;
+  if (!supabaseKey) {
+    console.error('❌ Error: SUPABASE_KEY is missing in your .env file.');
+    console.error('   Please go to Supabase Dashboard -> Project Settings -> API, copy the "anon" / "public" key, and add it as SUPABASE_KEY=... in .env');
     await pool.end();
-    process.exit(0);
+    process.exit(1);
   }
 
-  const files = fs.readdirSync(uploadDir).filter(file => {
-    return ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(path.extname(file).toLowerCase());
-  });
+  console.log(`📡 Fetching file list from Supabase Storage bucket "${SUPABASE_BUCKET_NAME}"...`);
+
+  // DEBUG: List all buckets in the project
+  try {
+    const bucketResponse = await fetch(
+      `https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/bucket`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`
+        }
+      }
+    );
+    if (bucketResponse.ok) {
+      const buckets = await bucketResponse.json();
+      console.log('DEBUG: Available buckets in your project:', buckets.map(b => ({ name: b.name, public: b.public })));
+    } else {
+      console.log('DEBUG: Failed to retrieve buckets list:', bucketResponse.status);
+    }
+  } catch (bucketErr) {
+    console.log('DEBUG: Error listing buckets:', bucketErr.message);
+  }
+
+  let files = [];
+  try {
+    const response = await fetch(
+      `https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/object/list/${SUPABASE_BUCKET_NAME}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          prefix: '',
+          limit: 1000,
+          offset: 0,
+          sortBy: { column: 'name', order: 'asc' }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Supabase API responded with status ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    console.log('DEBUG: Raw items from Supabase Storage API:', data);
+    if (!Array.isArray(data)) {
+      throw new Error(`Unexpected API response structure: ${JSON.stringify(data)}`);
+    }
+
+    // Filter to keep only image objects (ignoring placeholders or folders)
+    files = data.filter(item => {
+      if (!item.name || item.name === '.emptyFolderPlaceholder') return false;
+      const ext = item.name.split('.').pop().toLowerCase();
+      return ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext);
+    });
+
+  } catch (err) {
+    console.error('❌ Failed to fetch files from Supabase Storage:', err.message);
+    await pool.end();
+    process.exit(1);
+  }
 
   if (files.length === 0) {
-    console.log(`ℹ️ No image files found in ${uploadDir}. Please add your images there first to let us read their filenames!`);
+    console.log(`ℹ️ No image files found in the Supabase Storage bucket "${SUPABASE_BUCKET_NAME}". Make sure you uploaded images there!`);
     await pool.end();
     return;
   }
 
-  console.log(`⚡ Found ${files.length} local filenames.`);
-  console.log(USE_SUPABASE_STORAGE 
-    ? `🔗 Generating Supabase Storage public links (Bucket: "${SUPABASE_BUCKET_NAME}")...` 
-    : `🔗 Generating local static path links...`
-  );
+  console.log(`⚡ Found ${files.length} images in Supabase Storage. Linking to database...`);
 
-  for (const file of files) {
-    const ext = path.extname(file);
-    const idOrName = path.basename(file, ext); // e.g. "p1" or "mitti-cup"
+  for (const item of files) {
+    const file = item.name;
+    const ext = file.substring(file.lastIndexOf('.'));
+    const idOrName = file.substring(0, file.lastIndexOf('.')); // e.g. "p1" or "mitti-cup"
     
-    // Construct target URL based on configuration
-    const imageUrl = USE_SUPABASE_STORAGE
-      ? `https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/object/public/${SUPABASE_BUCKET_NAME}/${encodeURIComponent(file)}`
-      : `/uploads/${file}`;
+    // Construct the public URL of the Supabase Storage object
+    const imageUrl = `https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/object/public/${SUPABASE_BUCKET_NAME}/${encodeURIComponent(file)}`;
 
     // 1. Try to match by product ID (e.g. "p1")
     const matchRes = await pool.query(
@@ -91,12 +142,12 @@ async function runSeeder() {
           imageUrl
         ]
       );
-      console.log(`🌱 Created draft: "${cleanedName}" with link ➔ "${imageUrl}"`);
+      console.log(`🌱 Created draft: "${cleanedName}" ➔ "${imageUrl}"`);
     }
   }
 
   await pool.end();
-  console.log('\n🎉 Seeding complete! All images successfully linked in your Supabase database.');
+  console.log('\n🎉 Seeding complete! All Supabase Storage images successfully linked in your database.');
 }
 
 runSeeder().catch(err => {
