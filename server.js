@@ -56,6 +56,9 @@ if (!fs.existsSync(uploadDir)) {
 }
 app.use('/uploads', express.static(uploadDir));
 
+// Serve frontend static assets (Vite build output)
+app.use(express.static(path.join(__dirname, 'dist')));
+
 // Database connection
 const { Pool } = pg;
 let pool = null;
