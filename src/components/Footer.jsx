@@ -39,7 +39,7 @@ export default function Footer() {
           <div className="footer-col">
             <h4>Order Desk</h4>
             <p className="address-text">
-              Call/WhatsApp: +91 9881092595<br />
+              Call/WhatsApp: +91 99751 11418<br />
               Email: kulhadwalamanufaturerpune@gmail.com<br />
               Mon - Sat: 9:00 AM - 7:00 PM
             </p>
