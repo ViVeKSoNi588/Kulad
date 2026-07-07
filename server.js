@@ -10,8 +10,34 @@ import crypto from 'crypto';
 
 dotenv.config();
 
-// In-memory store for active session tokens
-const activeTokens = new Set();
+// Cryptographic stateless token helper methods
+function generateToken() {
+  const expiry = Date.now() + 24 * 60 * 60 * 1000; // Token valid for 24 hours
+  const payload = JSON.stringify({ user: 'admin', expiry });
+  const secret = process.env.ADMIN_PASSWORD || 'admin123';
+  const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return Buffer.from(payload).toString('base64') + '.' + signature;
+}
+
+function verifyToken(token) {
+  if (!token) return false;
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  try {
+    const payloadBase64 = parts[0];
+    const signature = parts[1];
+    const payloadStr = Buffer.from(payloadBase64, 'base64').toString('utf8');
+    const payload = JSON.parse(payloadStr);
+    
+    if (payload.expiry < Date.now()) return false; // Token expired
+    
+    const secret = process.env.ADMIN_PASSWORD || 'admin123';
+    const expectedSignature = crypto.createHmac('sha256', secret).update(payloadStr).digest('hex');
+    return signature === expectedSignature;
+  } catch (err) {
+    return false;
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,7 +145,7 @@ const authenticateAdmin = (req, res, next) => {
     return res.status(401).json({ error: 'Unauthorized. Missing or invalid token.' });
   }
   const token = authHeader.split(' ')[1];
-  if (!activeTokens.has(token)) {
+  if (!verifyToken(token)) {
     return res.status(401).json({ error: 'Unauthorized. Invalid or expired token.' });
   }
   next();
@@ -157,20 +183,16 @@ app.post('/api/login', (req, res) => {
   const { password } = req.body;
   const correctPassword = process.env.ADMIN_PASSWORD || 'admin123';
   if (password === correctPassword) {
-    // Generate secure random token
-    const token = crypto.randomBytes(32).toString('hex');
-    activeTokens.add(token);
+    // Generate stateless token
+    const token = generateToken();
     res.json({ success: true, token });
   } else {
     res.status(401).json({ success: false, message: 'Invalid administration password.' });
   }
 });
 
-// 1b. Invalidate session token (Logout)
-app.post('/api/logout', authenticateAdmin, (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader.split(' ')[1];
-  activeTokens.delete(token);
+// 1b. Invalidate session token (Logout - client clears the token statelessly)
+app.post('/api/logout', (req, res) => {
   res.json({ success: true, message: 'Logged out successfully.' });
 });
 
