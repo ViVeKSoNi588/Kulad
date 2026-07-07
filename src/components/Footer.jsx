@@ -39,8 +39,8 @@ export default function Footer() {
           <div className="footer-col">
             <h4>Order Desk</h4>
             <p className="address-text">
-              Call/WhatsApp: +91 99751 11418<br />
-              Email: kulhadwalamanufaturerpune@gmail.com<br />
+              Call/WhatsApp: <a href="https://wa.me/919975111418" target="_blank" rel="noopener noreferrer" className="footer-contact-link">+91 99751 11418</a><br />
+              Email: <a href="mailto:kulhadwalamanufaturerpune@gmail.com" className="footer-contact-link">kulhadwalamanufaturerpune@gmail.com</a><br />
               Mon - Sat: 9:00 AM - 7:00 PM
             </p>
           </div>
@@ -180,6 +180,16 @@ export default function Footer() {
           color: #D2C5BD;
           font-size: 0.9rem;
           line-height: 1.6;
+        }
+
+        .footer-contact-link {
+          color: #D2C5BD;
+          text-decoration: none;
+          transition: var(--transition-smooth);
+        }
+
+        .footer-contact-link:hover {
+          color: var(--color-brand-light);
         }
 
         /* Bottom copyright bar */

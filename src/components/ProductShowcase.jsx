@@ -58,7 +58,8 @@ export default function ProductShowcase({ isAdmin, onManageCatalog }) {
   };
 
   const handleWhatsAppRedirect = (product, qty) => {
-    const whatsappNumber = "9199751 11418";
+    const whatsappNumber = "919975111418";
+    const cleanedNumber = whatsappNumber.replace(/\D/g, "");
     const totalPrice = product.price * qty;
     const baseMessage = `Hello KulhadWala Pune! I am interested in inquiring about the following product:
 
@@ -70,7 +71,7 @@ export default function ProductShowcase({ isAdmin, onManageCatalog }) {
 Please share details regarding shipping, delivery timeline, and bulk availability if any.`;
     
     const encodedMessage = encodeURIComponent(baseMessage);
-    window.open(`https://wa.me/${whatsappNumber}?text=${encodedMessage}`, '_blank');
+    window.open(`https://wa.me/${cleanedNumber}?text=${encodedMessage}`, '_blank');
   };
 
   // Helper to render high quality dynamic SVG based on product type
