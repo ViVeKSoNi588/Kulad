@@ -28,5 +28,6 @@ dist-ssr
 .env.local
 .env.*
 
-# Local upload directory
+# Local upload directories
 /uploads/
+/public/uploads/

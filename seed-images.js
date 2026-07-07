@@ -5,6 +5,19 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// ==========================================
+// CONFIGURATION
+// ==========================================
+// Set this to true to use Supabase Storage. Set to false to commit images to Git/Render.
+const USE_SUPABASE_STORAGE = true; 
+
+// Your Supabase Project Reference (extracted from your DATABASE_URL)
+const SUPABASE_PROJECT_REF = 'kcvgzzpdhfwadsxxdbjn';
+
+// The name of the public bucket you created in Supabase Storage (e.g. 'product-images')
+const SUPABASE_BUCKET_NAME = 'product-images'; 
+// ==========================================
+
 const { Pool } = pg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -26,17 +39,25 @@ async function runSeeder() {
   });
 
   if (files.length === 0) {
-    console.log(`ℹ️ No image files found in ${uploadDir}. Please add your .png, .jpg, or .webp images there first!`);
+    console.log(`ℹ️ No image files found in ${uploadDir}. Please add your images there first to let us read their filenames!`);
     await pool.end();
     return;
   }
 
-  console.log(`⚡ Found ${files.length} images. Linking to database...`);
+  console.log(`⚡ Found ${files.length} local filenames.`);
+  console.log(USE_SUPABASE_STORAGE 
+    ? `🔗 Generating Supabase Storage public links (Bucket: "${SUPABASE_BUCKET_NAME}")...` 
+    : `🔗 Generating local static path links...`
+  );
 
   for (const file of files) {
     const ext = path.extname(file);
     const idOrName = path.basename(file, ext); // e.g. "p1" or "mitti-cup"
-    const imageUrl = `/uploads/${file}`;
+    
+    // Construct target URL based on configuration
+    const imageUrl = USE_SUPABASE_STORAGE
+      ? `https://${SUPABASE_PROJECT_REF}.supabase.co/storage/v1/object/public/${SUPABASE_BUCKET_NAME}/${encodeURIComponent(file)}`
+      : `/uploads/${file}`;
 
     // 1. Try to match by product ID (e.g. "p1")
     const matchRes = await pool.query(
@@ -45,7 +66,7 @@ async function runSeeder() {
     );
 
     if (matchRes.rowCount > 0) {
-      console.log(`✅ Linked image "${file}" to existing product "${matchRes.rows[0].name}"`);
+      console.log(`✅ Linked: "${file}" ➔ product "${matchRes.rows[0].name}"`);
     } else {
       // 2. If it does not match an existing ID, create a new product draft automatically
       const cleanedName = idOrName
@@ -70,12 +91,12 @@ async function runSeeder() {
           imageUrl
         ]
       );
-      console.log(`🌱 Created new draft product "${cleanedName}" for image "${file}"`);
+      console.log(`🌱 Created draft: "${cleanedName}" with link ➔ "${imageUrl}"`);
     }
   }
 
   await pool.end();
-  console.log('🎉 Seeding complete! All images linked in the database.');
+  console.log('\n🎉 Seeding complete! All images successfully linked in your Supabase database.');
 }
 
 runSeeder().catch(err => {
