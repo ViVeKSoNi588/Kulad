@@ -58,7 +58,7 @@ export default function ProductShowcase({ isAdmin, onManageCatalog }) {
   };
 
   const handleWhatsAppRedirect = (product, qty) => {
-    const whatsappNumber = "99751 11418";
+    const whatsappNumber = "9199751 11418";
     const totalPrice = product.price * qty;
     const baseMessage = `Hello KulhadWala Pune! I am interested in inquiring about the following product:
 
